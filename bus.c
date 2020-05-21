@@ -9,7 +9,12 @@ freeSeats/count : a shared variable between bus and passenger
 
 struct station {
     struct lock* lock;
-    struct condition* cond;
+    // struct condition* cond;
+    struct condition* busAvailable;
+    struct condition* freeSeatAvailable;
+    struct condition* passengerAvailable;
+    struct condition* passengerOnBus;
+    struct condition* passengerLoaded;
     // struct lock *lock = malloc(sizeof(struct lock));
     // struct condition *cond = malloc(sizeof(struct cond));
     int waitingPassengersCount;
@@ -18,25 +23,33 @@ struct station {
 
 void station_setup(struct station *station) {
     station = malloc(sizeof(station));
+    station->freeSeats = 0;
+    station->waitingPassengersCount = 0;
     // struct station* station = {->waitingPassengersCount}
     lock_init(station->lock);
-    cond_init(station->cond);
+    // cond_init(station->cond);
+    cond_init(station->busAvailable);
+    cond_init(station->freeSeatAvailable);
+    cond_init(station->passengerAvailable);
+    cond_init(station->passengerOnBus);
 }
 
 void bus_load_passengers(struct station *station, int count) {
     //count: number of total seats 
+    
     station->freeSeats = count;
     
     // int freeSeats = station->freeSeats;
     // int waitingPassengersCount = station->waitingPassengersCount;
     
     lock_acquire(station->lock);
-    cond_broadcast(station->cond, station->lock);
+    cond_broadcast(station->busAvailable, station->lock);
     while (station->freeSeats > 0 || station->waitingPassengersCount > 0)       
     {
-        cond_wait(station->cond, station->lock);
-        
+        cond_wait(station->passengerOnBus, station->lock);
+        cond_wait(station->passengerLoaded, station->lock);
     }
+    
     // while (station->freeSeats > 0 || station->waitingPassengersCount > 0)       
     // {
     //     cond_wait(station->cond, station->lock);
@@ -57,41 +70,41 @@ void bus_load_passengers(struct station *station, int count) {
     //     }
 
 
-        
-        
 
-    // } while (station->freeSeats > 0 || station->waitingPassengersCount > 0);
-    
-    // lock_release(lock);
-    
-    // int temp = count;
-    // lock = lock_init();
-    // do
-    // {
-
-    //     lock_acquire();
-
-
-    //     lock_release();
-    // } while (true);
     
 }
 
 void passenger_waitfor_bus(struct station *station) {
     
+    lock_acquire(station->lock);
+    station->waitingPassengersCount++;
+    while (station->freeSeats == 0)
+    {   
+        cond_wait(station->busAvailable, station->lock);
+        cond_wait(station->freeSeatAvailable, station->lock);
+    }
+    station->waitingPassengersCount--;
+    cond_signal(station->passengerLoaded, station->lock);
+    lock_release(station->lock);
+    //signal no passenger!
+    
+    
+
+
     // int freeSeats = station->freeSeats;
     // int waitingPassengersCount = station->waitingPassengersCount;
     // waitingPassengersCount--;
     // station->waitingPassengersCount = waitingPassengersCount;
-    lock_acquire(station->lock);
-    while (station->waitingPassengersCount > 0)
-    {
-        // lock_acquire(station->lock);
+    
+    // lock_acquire(station->lock);
+    // while (station->waitingPassengersCount > 0)
+    // {
+    //     lock_acquire(station->lock);
         
-    }
-    station->waitingPassengersCount--;
-    cond_signal(station->cond, station->lock);
-    lock_release(station->lock);
+    // }
+    // station->waitingPassengersCount--;
+    // cond_signal(station->cond, station->lock);
+    // lock_release(station->lock);
     
     // lock_acquire(station->lock);
     // station->waitingPassengersCount += 1;
@@ -106,13 +119,14 @@ void passenger_waitfor_bus(struct station *station) {
 void passenger_on_board(struct station *station) {
     // station->passengersCount = station->passengersCount - 1;
     // freeSeats--;
+
     lock_acquire(station->lock);
-    while (station->freeSeats > 0)
-    {
-        cond_wait(station->cond, station->lock);
-    }
+    // while (station->freeSeats == 0)
+    // {
+    //     cond_wait(station->freeSeatAvailable, station->lock);
+    // }
     station->freeSeats--;
-    cond_signal(station->cond, station->lock);
+    cond_signal(station->passengerOnBus, station->lock);
     lock_release(station->lock);
     
     
